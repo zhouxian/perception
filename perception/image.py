@@ -14,7 +14,12 @@ import matplotlib.pyplot as plt
 
 from core import PointCloud, NormalCloud, PointNormalCloud, Box
 
+<<<<<<< HEAD
 import constants as constants
+=======
+from core import RigidTransform, Point, PointCloud, NormalCloud, PointNormalCloud, Box
+import core.constants as constants
+>>>>>>> dev_jacky
 
 class Image(object):
     """Abstract wrapper class for images.

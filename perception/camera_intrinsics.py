@@ -10,7 +10,11 @@ import os
 from image import DepthImage, PointCloudImage
 from core import Point, PointCloud, ImageCoords
 
+<<<<<<< HEAD
 from constants import INTR_EXTENSION
+=======
+from core.constants import INTR_EXTENSION
+>>>>>>> dev_jacky
 
 class CameraIntrinsics(object):
     """A set of intrinsic parameters for a camera. This class is used to project

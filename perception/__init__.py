@@ -1,27 +1,35 @@
-#from bincam_2D import BinaryCamera
+'''
+Alan Perception Module.
+Authors: Jeff, Jacky
+'''
+import logging
 from camera_intrinsics import CameraIntrinsics
-from cnn import AlexNetWeights, AlexNet, conv
-from feature_extractors import FeatureExtractor, CNNBatchFeatureExtractor, CNNReusableBatchFeatureExtractor
-from feature_matcher import Correspondences, NormalCorrespondences, FeatureMatcher, RawDistanceFeatureMatcher, PointToPlaneFeatureMatcher
-from features import Feature, LocalFeature, GlobalFeature, SHOTFeature, MVCNNFeature, BagOfFeatures
-from image import Image, ColorImage, DepthImage, IrImage, GrayscaleImage, BinaryImage, PointCloudImage, NormalCloudImage
-from kinect2_sensor import Kinect2PacketPipelineMode, Kinect2FrameMode, Kinect2RegistrationMode, Kinect2DepthMode, Kinect2Sensor, VirtualKinect2Sensor, load_images
-from object_render import RenderMode, ObjectRender, QueryImageBundle
-from registration import RegistrationResult, IterativeRegistrationSolver, PointToPlaneICPSolver
-from rgbd_sensor import RgbdSensor
+try:
+    from cnn import AlexNet, AlexNetWeights
+    from feature_extractors import CNNBatchFeatureExtractor
+except Exception, e:
+    logging.warn("Cannot import CNNBatchFeatureExtractor: \n{0}".format(str(e)))
+from feature_matcher import FeatureMatcher, PointToPlaneFeatureMatcher
+from features import LocalFeature, GlobalFeature, SHOTFeature, MVCNNFeature, BagOfFeatures
+from image import Image, ColorImage, DepthImage, IrImage, GrayscaleImage, BinaryImage
+try:
+    from kinect2_sensor import Kinect2PacketPipelineMode, Kinect2FrameMode, Kinect2RegistrationMode, Kinect2DepthMode, Kinect2Sensor, VirtualKinect2Sensor, load_images
+except Exception:
+    logging.warn("Cannot import kinect2_sensor!")
+from opencv_camera_sensor import OpenCVCameraSensor
+from registration import IterativeRegistrationSolver, PointToPlaneICPSolver, RegistrationResult
 from video_recorder import VideoRecorder
+from video_writer import write_video
 
-__all__ = [
-#    'BinaryCamera',
-    'CameraIntrinsics',
-    'AlexNetWeights', 'AlexNet', 'conv',
-    'FeatureExtractor', 'CNNBatchFeatureExtractor', 'CNNReusableBatchFeatureExtractor',
-    'Correspondences', 'NormalCorrespondences', 'FeatureMatcher', 'RawDistanceFeatureMatcher', 'PointToPlaneFeatureMatcher',
-    'Feature', 'LocalFeature', 'GlobalFeature', 'SHOTFeature', 'MVCNNFeature', 'BagOfFeatures',
-    'Image', 'ColorImage', 'DepthImage', 'IrImage', 'GrayscaleImage', 'BinaryImage', 'PointCloudImage', 'NormalCloudImage',
-    'Kinect2PacketPipelineMode', 'Kinect2FrameMode', 'Kinect2RegistrationMode', 'Kinect2DepthMode', 'Kinect2Sensor', 'VirtualKinect2Sensor', 'load_images',
-    'RenderMode', 'ObjectRender', 'QueryImageBundle',
-    'RegistrationResult', 'IterativeRegistrationSolver', 'PointToPlaneICPSolver',
-    'RgbdSensor',
-    'VideoRecorder'
+
+__all__ = ['Image', 'ColorImage', 'DepthImage', 'IrImage', 'GrayscaleImage',
+          'AlexNet', 'AlexNetWeights',
+          'Kinect2PacketPipelineMode', 'Kinect2FrameMode', 'Kinect2RegistrationMode','Kinect2DepthMode', 'Kinect2Sensor',
+          'CameraIntrinsics',
+          'CNNBatchFeatureExtractor',
+          'FeatureMatcher','PointToPlaneFeatureMatcher',
+          'IterativeRegistrationSolver','PointToPlaneICPSolver','RegistrationResult',
+          "LocalFeature", "GlobalFeature", "SHOTFeature", "MVCNNFeature", "BagOfFeatures",
+          'VideoRecorder',
+          'OpenCVCameraSensor',
 ]

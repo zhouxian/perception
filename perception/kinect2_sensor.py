@@ -7,15 +7,20 @@ import logging
 import numpy as np
 import os
 
+<<<<<<< HEAD
 from constants import MM_TO_METERS, INTR_EXTENSION
 try:
     import pylibfreenect2 as lf2
 except:
     logging.warning('Unable to import pylibfreenect2. Kinect sensing may not work properly.')
+=======
+from core.constants import MM_TO_METERS, INTR_EXTENSION
+import pylibfreenect2 as lf2
+>>>>>>> dev_jacky
 
 from camera_intrinsics import CameraIntrinsics
 from image import ColorImage, DepthImage, IrImage, Image
-from rgbd_sensor import RgbdSensor
+from camera_sensor import CameraSensor
 
 class Kinect2PacketPipelineMode:
     """Type of pipeline for Kinect packet processing.
@@ -41,11 +46,16 @@ class Kinect2DepthMode:
     METERS = 0
     MILLIMETERS = 1
 
+<<<<<<< HEAD
 class Kinect2Sensor(RgbdSensor):
     """Class for interacting with a Kinect v2 RGBD sensor.
     """
 
     #Constants for image height and width (in case they're needed somewhere)
+=======
+class Kinect2Sensor(CameraSensor):
+    # constants for image height and width (in case they're needed somewhere)
+>>>>>>> dev_jacky
     COLOR_IM_HEIGHT = 1080
     COLOR_IM_WIDTH = 1920
     DEPTH_IM_HEIGHT = 424
@@ -318,9 +328,15 @@ class Kinect2Sensor(RgbdSensor):
                 IrImage(ir_arr.astype(np.uint16), self._ir_frame),
                 color_depth_map)
 
+<<<<<<< HEAD
 class VirtualKinect2Sensor(RgbdSensor):
     """Class for a virtualized Kinect v2 sensor that uses pre-captured images
     instead of actually connecting to a sensor.
+=======
+class VirtualKinect2Sensor(CameraSensor):
+    """
+    Class to spoof the Kinect2Sensor when using pre-captured test images
+>>>>>>> dev_jacky
     """ 
 
     def __init__(self, path_to_images, frame=None):

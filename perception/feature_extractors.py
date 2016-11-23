@@ -8,7 +8,11 @@ import logging
 import numpy as np
 import time
 
+<<<<<<< HEAD
 import constants as constants
+=======
+import core.constants as constants
+>>>>>>> dev_jacky
 from cnn import AlexNet
 from image import Image, ColorImage
 
