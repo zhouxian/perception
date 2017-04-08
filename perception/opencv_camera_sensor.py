@@ -22,8 +22,8 @@ class OpenCVCameraSensor(CameraSensor):
             raise Exception("Unable to open OpenCVCameraSensor for id {0}".format(self._device_id))
         self.flush()
 
-    def flush(self):
-        for _ in range(6):
+    def flush(self, n=6):
+        for _ in range(n):
             self._sensor.read()
 
     def stop(self):
@@ -35,7 +35,7 @@ class OpenCVCameraSensor(CameraSensor):
         Raises:
             Exception if opencv sensor gives ret_val of 0
         """
-        self.flush()
+        self.flush(n=1)
         ret_val, frame = self._sensor.read()
         if not ret_val:
             raise Exception("Unable to retrieve frame from OpenCVCameraSensor for id {0}".format(self._device_id))
