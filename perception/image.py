@@ -3,6 +3,7 @@ Lean classes to encapculate images
 Author: Jeff
 """
 from abc import ABCMeta, abstractmethod
+import logging
 import os
 import IPython
 
@@ -14,6 +15,7 @@ import PIL.Image as PImage
 import scipy.misc as sm
 import scipy.signal as ssg
 import scipy.ndimage.filters as sf
+import scipy.ndimage.interpolation as sni
 import scipy.ndimage.morphology as snm
 import scipy.spatial.distance as ssd
 import scipy.signal as ssg
@@ -23,11 +25,18 @@ import sklearn.cluster as sc
 import sklearn.mixture as smx
 import scipy.ndimage.filters as sf
 import scipy.spatial.distance as ssd
+import skimage.morphology as morph
 import scipy.ndimage.morphology as snm
 
-from core import PointCloud, NormalCloud, PointNormalCloud, Box, Contour
+from autolab_core import PointCloud, NormalCloud, PointNormalCloud, Box, Contour
 
 import constants as constants
+
+try:
+    from sensor_msgs.msg import Image
+    from cv_bridge import CvBridge, CvBridgeError
+except Exception:
+    print 'WARNING: AUTOLab Perception Module not installed as Catkin Package. ROS msg conversions will not be available for Perception wrappers'
 
 class Image(object):
     """Abstract wrapper class for images.
@@ -168,6 +177,17 @@ class Image(object):
             to zero.
         """
 
+    @property
+    def rosmsg(self):
+        """:obj:`sensor_msgs.Image` : ROS Image 
+        """
+        cv_bridge = CvBridge()
+        try:
+            return cv_bridge.cv2_to_imgmsg(self._data, encoding=self._encoding)
+        except CvBridgeError as cv_bridge_exception:
+            print cv_bridge_exception
+
+
     @abstractmethod
     def _check_valid_data(self, data):
         """Checks that the given data is valid.
@@ -208,16 +228,17 @@ class Image(object):
         """
         pass
 
-    def transform(self, translation, theta):
+    def transform(self, translation, theta, method='opencv'):
         """Create a new image by translating and rotating the current image.
 
         Parameters
         ----------
         translation : :obj:`numpy.ndarray` of float
             The XY translation vector.
-
         theta : float
             Rotation angle in radians, with positive meaning counter-clockwise.
+        method : :obj:`str`
+            Method to use for image transformations (opencv or scipy)
 
         Returns
         -------
@@ -226,13 +247,30 @@ class Image(object):
         """
         theta = np.rad2deg(theta)
         trans_map = np.float32([[1,0,translation[1]], [0,1,translation[0]]])
-        rot_map = cv2.getRotationMatrix2D(tuple(self.center), theta, 1)
+        rot_map = cv2.getRotationMatrix2D((self.center[1], self.center[0]), theta, 1)
         trans_map_aff = np.r_[trans_map, [[0,0,1]]]
         rot_map_aff = np.r_[rot_map, [[0,0,1]]]
         full_map = rot_map_aff.dot(trans_map_aff)
         full_map = full_map[:2,:]
-        im_data_tf = cv2.warpAffine(self.data, full_map, (self.height, self.width), flags=cv2.INTER_NEAREST)
+        if method == 'opencv':
+            im_data_tf = cv2.warpAffine(self.data, full_map, (self.width, self.height), flags=cv2.INTER_NEAREST)
+        else:
+            im_data_tf = sni.affine_transform(self.data,
+                                              matrix=full_map[:,:2],
+                                              offset=full_map[:,2],
+                                              order=0)
         return type(self)(im_data_tf.astype(self.data.dtype), frame=self._frame)
+
+    def gradients(self):
+        """Return the gradient as a pair of numpy arrays.
+
+        Returns
+        -------
+        :obj:`tuple` of :obj:`numpy.ndarray` of float
+            The gradients of the image along each dimension.
+        """
+        g = np.gradient(self.data.astype(np.float32))
+        return g
 
     def ij_to_linear(self, i, j):
         """Converts row / column coordinates to linear indices.
@@ -422,11 +460,11 @@ class Image(object):
             if len(indices) > 1:
                 j = indices[1]
             if len(indices) > 2:
-                k = indices[2]
+                k = indices[2]  
         else:
             i = indices
 
-        # check indices
+        # check indices and slicing
         if (type(i) == int and i < 0) or \
            (j is not None and type(j) == int and j < 0) or \
            (k is not None and type(k) is int and k < 0) or \
@@ -434,6 +472,13 @@ class Image(object):
            (j is not None and type(j) == int and j >= self.width) or \
            (k is not None and type(k) == int and k >= self.channels):
             raise ValueError('Out of bounds indexing')
+        if (type(i) == slice and i.start < 0) or \
+           (j is not None and type(j) == slice and j.start < 0) or \
+           (k is not None and type(k) == slice and k.start < 0) or \
+           (type(i) == slice and i.stop > self.height) or \
+           (j is not None and type(j) == slice and j.stop > self.width) or \
+           (k is not None and type(k) == slice and k.stop > self.channels):
+           raise ValueError('Out of bounds slicing')
         if k is not None and type(k) == int and k > 1 and self.channels < 3:
             raise ValueError('Illegal indexing. Image is not 3 dimensional')
 
@@ -513,10 +558,10 @@ class Image(object):
             center_j = float(self.width) / 2
 
         # crop using PIL
-        desired_start_row = np.floor(center_i - float(height) / 2)
-        desired_end_row = np.floor(center_i + float(height) / 2)
-        desired_start_col = np.floor(center_j - float(width) / 2)
-        desired_end_col = np.floor(center_j + float(width) / 2)
+        desired_start_row = int(np.floor(center_i - float(height) / 2))
+        desired_end_row = int(np.floor(center_i + float(height) / 2))
+        desired_start_col = int(np.floor(center_j - float(width) / 2))
+        desired_end_col = int(np.floor(center_j + float(width) / 2))
 
         pil_im = PImage.fromarray(self.data)
         cropped_pil_im = pil_im.crop((desired_start_col,
@@ -599,26 +644,6 @@ class Image(object):
 
         return type(self)(shifted_data.astype(self.data.dtype), frame=self._frame), diff_px
 
-    def transform(self, translation, theta):
-        """ Translate and rotate image.
-
-        Parameters
-        ----------
-        translation : :obj:`numpy.ndarray`
-            2-vector of the translation to perform, in pixels
-        theta : float
-            amount to rotate the image
-        """
-        theta = np.rad2deg(theta)
-        trans_map = np.float32([[1,0,translation[1]], [0,1,translation[0]]])
-        rot_map = cv2.getRotationMatrix2D(tuple(self.center), theta, 1)
-        trans_map_aff = np.r_[trans_map, [[0,0,1]]]
-        rot_map_aff = np.r_[rot_map, [[0,0,1]]]
-        full_map = rot_map_aff.dot(trans_map_aff)
-        full_map = full_map[:2,:]
-        im_data_tf = cv2.warpAffine(self.data, full_map, (self.height, self.width), flags=cv2.INTER_NEAREST)
-        return type(self)(im_data_tf.astype(self.data.dtype), frame=self._frame)
-
     def nonzero_pixels(self):
         """ Return an array of the nonzero pixels.
 
@@ -627,7 +652,7 @@ class Image(object):
         :obj:`numpy.ndarray`
              Nx2 array of the nonzero pixels
         """
-        nonzero_px = np.where(self.data > 0)
+        nonzero_px = np.where(np.sum(self.raw_data, axis=2) > 0)
         nonzero_px = np.c_[nonzero_px[0], nonzero_px[1]]
         return nonzero_px
 
@@ -639,9 +664,21 @@ class Image(object):
         :obj:`numpy.ndarray`
              Nx2 array of the zero pixels
         """
-        zero_px = np.where(self.data == 0)
+        zero_px = np.where(np.sum(self.raw_data, axis=2) == 0)
         zero_px = np.c_[zero_px[0], zero_px[1]]
         return zero_px
+
+    def nan_pixels(self):
+        """ Return an array of the NaN pixels.
+
+        Returns
+        -------
+        :obj:`numpy.ndarray`
+             Nx2 array of the NaN pixels
+        """
+        nan_px = np.where(np.isnan(np.sum(self.raw_data, axis=2)))
+        nan_px = np.c_[nan_px[0], nan_px[1]]
+        return nan_px
 
     def finite_pixels(self):
         """ Return an array of the finite pixels.
@@ -787,6 +824,7 @@ class ColorImage(Image):
             string.
         """
         Image.__init__(self, data, frame)
+        self._encoding = 'rgb8'
 
     def _check_valid_data(self, data):
         """Checks that the given data is a uint8 array with one or three
@@ -836,6 +874,30 @@ class ColorImage(Image):
         """:obj:`numpy.ndarray` of uint8 : The blue-channel data.
         """
         return self.data[:,:,2]
+
+    def swap_channels(self, channel_swap):
+        """ Swaps the two channels specified in the tuple.
+        
+        Parameters
+        ----------
+        channel_swap : :obj:`tuple` of int
+            the two channels to swap
+
+        Returns
+        -------
+        :obj:`ColorImage`
+            color image with cols swapped
+        """
+        if len(channel_swap) != 2:
+            raise ValueError('Illegal value for channel swap')
+        ci = channel_swap[0]
+        cj = channel_swap[1]
+        if ci < 0 or ci > 2 or cj < 0 or cj > 2:
+            raise ValueError('Channels must be between 0 and 1')
+        new_data = self.data.copy()
+        new_data[:,:,ci] = self.data[:,:,cj]
+        new_data[:,:,cj] = self.data[:,:,ci]
+        return ColorImage(new_data, frame=self._frame)
 
     def resize(self, size, interp='bilinear'):
         """Resize the image.
@@ -1037,7 +1099,7 @@ class ColorImage(Image):
 
         Parameters
         ----------
-        :obj:`core.Box`
+        :obj:`autolab_core.Box`
             A 2D box to draw in the image.
 
         Returns
@@ -1217,6 +1279,8 @@ class DepthImage(Image):
         """
         Image.__init__(self, data, frame)
         self._data = self._data.astype(np.float32)
+        self._data[np.isnan(self._data)] = 0.0
+        self._encoding = 'passthrough'
 
     def _check_valid_data(self, data):
         """Checks that the given data is a float array with one channel.
@@ -1290,17 +1354,6 @@ class DepthImage(Image):
         """
         resized_data = sm.imresize(self.data, size, interp=interp, mode='F')
         return DepthImage(resized_data, self._frame)
-
-    def gradients(self):
-        """Return the gradient as a pair of numpy arrays.
-
-        Returns
-        -------
-        :obj:`tuple` of :obj:`numpy.ndarray` of float
-            The x-gradient and y-gradient of the image.
-        """
-        gx, gy = np.gradient(self.data)
-        return gx, gy
 
     def threshold(self, front_thresh=0.0, rear_thresh=100.0):
         """Creates a new DepthImage by setting all depths less than
@@ -1417,6 +1470,25 @@ class DepthImage(Image):
         new_data[self.data == 0] = filled_data[self.data == 0]
         return DepthImage(new_data, frame=self.frame)
 
+    def invalid_pixel_mask(self):
+        """ Returns a binary mask for the NaN- and zero-valued pixels.
+        Serves as a mask for invalid pixels.
+
+        Returns
+        -------
+        :obj:`BinaryImage`
+            Binary image where a pixel value greater than zero indicates an invalid pixel.
+        """
+        # init mask buffer
+        mask = np.zeros([self.height, self.width, 1]).astype(np.uint8)
+        
+        # update invalid pixels
+        zero_pixels = self.zero_pixels()
+        nan_pixels = self.nan_pixels()
+        mask[zero_pixels[:,0], zero_pixels[:,1]] = 255
+        mask[nan_pixels[:,0], nan_pixels[:,1]] = 255
+        return BinaryImage(mask, frame=self.frame)
+
     def mask_binary(self, binary_im):
         """Create a new image by zeroing out data at locations
         where binary_im == 0.0.
@@ -1430,13 +1502,33 @@ class DepthImage(Image):
 
         Returns
         -------
-        :obj:`Image`
-            A new Image of the same type, masked by the given binary image.
+        :obj:`DepthImage`
+            A new DepthImage of the same type, masked by the given binary image.
         """
         data = np.copy(self._data)
         ind = np.where(binary_im.data == 0)
         data[ind[0], ind[1]] = 0.0
         return DepthImage(data, self._frame)
+
+    def pixels_farther_than(self, depth_im):
+        """
+        Returns the pixels that are farther away
+        than those in the corresponding depth image.
+
+        Parameters
+        ----------
+        depth_im : :obj:`DepthImage`
+            depth image to query replacement with
+
+        Returns
+        -------
+        :obj:`numpy.ndarray`
+            the pixels
+        """
+        # take closest pixel
+        farther_px = np.where(self.data > depth_im.data)
+        farther_px = np.c_[farther_px[0], farther_px[1]]
+        return farther_px
 
     def combine_with(self, depth_im):
         """
@@ -1456,8 +1548,7 @@ class DepthImage(Image):
         # replace zero pixels
         new_data[new_data == 0] = depth_im.data[new_data == 0]
         # take closest pixel
-        new_data[new_data > depth_im.data] = depth_im.data[new_data > depth_im.data]
-
+        new_data[(new_data > depth_im.data) & (depth_im.data > 0)] = depth_im.data[(new_data > depth_im.data)  & (depth_im.data > 0)]
         return DepthImage(new_data, frame=self.frame)
 
     def to_binary(self, threshold=0.0):
@@ -1515,7 +1606,7 @@ class DepthImage(Image):
 
         Returns
         -------
-        :obj:`core.PointNormalCloud`
+        :obj:`autolab_core.PointNormalCloud`
             A PointNormalCloud created from the depth image.
         """
         point_cloud_im = camera_intr.deproject_to_image(self)
@@ -1853,29 +1944,57 @@ class BinaryImage(Image):
         """
         data = np.copy(self._data)
         ind = np.where(binary_im.data == 0)
-        data[ind[0], ind[1], ...] = 0.0
+        data[ind[0], ind[1], ...] = 0
         return BinaryImage(data, self._frame)
 
-    def prune_contours(self, area_thresh=1000.0, dist_thresh=20):
-        """Removes all white connected components with area less than area_thresh.
+    def pixelwise_or(self, binary_im):
+        """ Takes OR operation with other binary image.
 
+        Parameters
+        ----------
+        binary_im : :obj:`BinaryImage`
+            binary image for and operation
+
+        Returns
+        -------
+        :obj:`BinaryImage`
+            OR of this binary image and other image
+        """
+        data = np.copy(self._data)
+        ind = np.where(binary_im.data > 0)
+        data[ind[0], ind[1], ...] = 255
+        return BinaryImage(data, self._frame)        
+
+    def inverse(self):
+        """ Inverts image (all nonzeros become zeros and vice verse)
+        Returns
+        -------
+        :obj:`BinaryImage`
+            inverse of this binary image
+        """
+        data = np.zeros(self.shape).astype(np.uint8)
+        ind = np.where(self.data == 0)
+        data[ind[0], ind[1], ...] = 255
+        return BinaryImage(data, self._frame)        
+
+    def prune_contours(self, area_thresh=1000.0, dist_thresh=20,
+                       preserve_topology=True):
+        """Removes all white connected components with area less than area_thresh.
         Parameters
         ----------
         area_thresh : float
             The minimum area for which a white connected component will not be
             zeroed out.
-
         dist_thresh : int
             If a connected component is within dist_thresh of the top of the
             image, it will not be pruned out, regardless of its area.
-
         Returns
         -------
         :obj:`BinaryImage`
             The new pruned binary image.
         """
         # get all contours (connected components) from the binary image
-        _, contours, _ = cv2.findContours(self.data.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        contours, hierarchy = cv2.findContours(self.data.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         num_contours = len(contours)
         middle_pixel = np.array(self.shape)[:2] / 2
         middle_pixel = middle_pixel.reshape(1,2)
@@ -1922,34 +2041,34 @@ class BinaryImage(Image):
         pruned_data = pruned_data[:,:,0] # convert back to one channel
 
         # preserve topology of original image
-        orig_zeros = np.where(self.data == 0)
-        pruned_data[orig_zeros[0], orig_zeros[1]] = 0
+        if preserve_topology:
+            orig_zeros = np.where(self.data == 0)
+            pruned_data[orig_zeros[0], orig_zeros[1]] = 0
         return BinaryImage(pruned_data.astype(np.uint8), self._frame)
 
     def find_contours(self, min_area=0.0, max_area=np.inf):
         """Returns a list of connected components with an area between
         min_area and max_area.
-
         Parameters
         ----------
         min_area : float
             The minimum area for a contour
         max_area : float
             The maximum area for a contour
-
         Returns
         -------
         :obj:`list` of :obj:`Contour`
             A list of resuting contours
         """
         # get all contours (connected components) from the binary image
-        _, contours, _ = cv2.findContours(self.data.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        contours, hierarchy = cv2.findContours(self.data.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         num_contours = len(contours)
         kept_contours = []
 
         # find which contours need to be pruned
         for i in range(num_contours):
             area = cv2.contourArea(contours[i])
+            logging.debug('Contour %d area: %.3f' %(len(kept_contours), area))
             if area > min_area and area < max_area:
                 boundary_px = contours[i].squeeze()
                 boundary_px_ij_swapped = np.zeros(boundary_px.shape)
@@ -1958,6 +2077,37 @@ class BinaryImage(Image):
                 kept_contours.append(Contour(boundary_px_ij_swapped, area=area, frame=self._frame))
 
         return kept_contours
+
+    def contour_mask(self, contour):
+        """ Generates a binary image with only the given contour filled in. """
+        # fill in new data
+        new_data = np.zeros(self.data.shape)
+        num_boundary = contour.boundary_pixels.shape[0]
+        boundary_px_ij_swapped = np.zeros([num_boundary, 1, 2])
+        boundary_px_ij_swapped[:,0,0] = contour.boundary_pixels[:,1]
+        boundary_px_ij_swapped[:,0,1] = contour.boundary_pixels[:,0]
+        cv2.fillPoly(new_data, pts=[boundary_px_ij_swapped.astype(np.int32)], color=(255,255,255))
+        orig_zeros = np.where(self.data == 0)
+        new_data[orig_zeros[0], orig_zeros[1]] = 0
+        return BinaryImage(new_data.astype(np.uint8), frame=self._frame)
+
+    def boundary_map(self):
+        """ Computes the boundary pixels in the image and sets them to nonzero values.
+
+        Returns
+        -------
+        :obj:`BinaryImage`
+            binary image with nonzeros on the boundary of the original image
+        """
+        # compute contours
+        contours = self.find_contours()
+        
+        # fill in nonzero pixels
+        new_data = np.zeros(self.data.shape)
+        for contour in contours:
+            new_data[contour.boundary_pixels[:,0].astype(np.uint8),
+                     contour.boundary_pixels[:,1].astype(np.uint8)] = np.iinfo(np.uint8).max
+        return BinaryImage(new_data.astype(np.uint8), frame=self.frame)
 
     def closest_nonzero_pixel(self, pixel, direction, w=13, t=0.5):
         """Starting at pixel, moves pixel by direction * t until there is a
@@ -2083,6 +2233,49 @@ class BinaryImage(Image):
         overlap_data[spurious_px[0], spurious_px[1], :] = yellow
         return ColorImage(overlap_data.astype(np.uint8), frame=self.frame)
 
+    def num_adjacent(self, i, j):
+        """ Counts the number of adjacent nonzero pixels to a given pixel.
+
+        Parameters
+        ----------
+        i : int
+            row index of query pixel
+        j : int
+            col index of query pixel
+
+        Returns
+        -------
+        int
+            number of adjacent nonzero pixels
+        """
+        # check values
+        if i < 1 or i > self.height-2 or j < 1 and j > self.width-2:
+            raise ValueError('Pixels out of bounds')
+
+        # count the number of blacks
+        count = 0
+        diffs = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+        for d in diffs:
+            if self.data[i+d[0]][j+d[1]] > self._threshold:
+                count += 1
+        return count
+
+    def to_sdf(self):
+        """ Converts the 2D image to a 2D signed distance field.
+
+        Returns
+        -------
+        :obj:`numpy.ndarray`
+            2D float array of the signed distance field
+        """
+        # compute medial axis transform
+	skel, sdf_in = morph.medial_axis(self.data, return_distance=True)
+        useless_skel, sdf_out = morph.medial_axis(np.iinfo(np.uint8).max - self.data, return_distance=True)
+
+        # convert to true sdf
+        sdf = sdf_out - sdf_in
+        return sdf
+
     def to_color(self):
         """Creates a ColorImage from the binary image.
 
@@ -2120,6 +2313,389 @@ class BinaryImage(Image):
         if len(data.shape) > 2 and data.shape[2] > 1:
             data = data[:,:,0]
         return BinaryImage(data, frame)
+
+class RgbdImage(Image):
+    """ An image containing a red, green, blue, and depth channel. """
+    def __init__(self, data, frame='unspecified'):
+        """ Create an RGB-D image from an array of data.
+
+        Parameters
+        ----------
+        data : :obj:`numpy.ndarray`
+            An array of data with which to make the image. The first dimension
+            of the data should index rows, the second columns, and the third
+            individual pixel elements (four channels, all float).
+            The first three channels should be the red, greed, and blue channels
+            which must be in the range (0, 255).
+            The fourth channel should be the depth channel.
+
+        frame : :obj:`str`
+            A string representing the frame of reference in which this image
+            lies.
+
+        Raises
+        ------
+        ValueError
+            If the data is not a properly-formatted ndarray or frame is not a
+            string.
+        """
+        Image.__init__(self, data, frame)
+
+    def _check_valid_data(self, data):
+        """Checks that the given data is a float array with four channels.
+
+        Parameters
+        ----------
+        data : :obj:`numpy.ndarray`
+            The data to check.
+
+        Raises
+        ------
+        ValueError
+            If the data is invalid.
+        """
+        if data.dtype.type is not np.float32 and \
+           data.dtype.type is not np.float64:
+            raise ValueError('Illegal data type. RGB-D images only support float arrays')
+
+        if len(data.shape) != 3 and data.shape[2] != 4:
+            raise ValueError('Illegal data type. RGB-D images only support four channel')        
+
+        color_data = data[:,:,:3]
+        if np.any((color_data < 0) | (color_data > 255)):
+            raise ValueError('Color channels must be in the range (0, 255)')
+
+    @staticmethod
+    def from_color_and_depth(color_im, depth_im):
+        """ Creates an RGB-D image from a separate color and depth image. """
+        # check shape
+        if color_im.height != depth_im.height or color_im.width != depth_im.width:
+            raise ValueError('Color and depth images must have the same shape')
+
+        # check frame
+        if color_im.frame != depth_im.frame:
+            raise ValueError('Color and depth images must have the same frame')
+            
+        # form composite data
+        rgbd_data = np.zeros([color_im.height, color_im.width, 4])
+        rgbd_data[:,:,:3] = color_im.data.astype(np.float64)
+        rgbd_data[:,:,3] = depth_im.data
+        return RgbdImage(rgbd_data, frame=color_im.frame)
+
+    @property
+    def color(self):
+        """ Returns the color image. """
+        return ColorImage(self.raw_data[:,:,:3].astype(np.uint8), frame=self.frame)
+
+    @property
+    def depth(self):
+        """ Returns the depth image. """
+        return DepthImage(self.raw_data[:,:,3], frame=self.frame)
+
+    def _image_data(self, normalize=False):
+        """Returns the data in image format, with scaling and conversion to uint8 types.
+        NOTE: Only returns the color image!!!!
+
+        Parameters
+        ----------
+        normalize : bool
+            whether or not to normalize by the min and max depth of the image
+
+        Returns
+        -------
+        :obj:`numpy.ndarray` of uint8
+            A 3D matrix representing the image. The first dimension is rows, the
+            second is columns, and the third is a set of 3 RGB values, each of
+            which is simply the depth entry scaled to between 0 and 255.
+        """
+        return self.color_im._image_data(normalize=normalize)
+
+    def resize(self, size, interp='bilinear'):
+        """Resize the image.
+
+        Parameters
+        ----------
+        size : int, float, or tuple
+            * int   - Percentage of current size.
+            * float - Fraction of current size.
+            * tuple - Size of the output image.
+
+        interp : :obj:`str`, optional
+            Interpolation to use for re-sizing ('nearest', 'lanczos', 'bilinear',
+            'bicubic', or 'cubic')
+        """
+        # resize channels separately
+        color_im_resized = self.color.resize(size, interp)
+        depth_im_resized = self.depth.resize(size, interp)
+        
+        # return combination of resized data
+        return RgbdImage.from_color_and_depth(color_im_resized, depth_im_resized)
+
+    def crop(self, height, width, center_i=None, center_j=None):
+        """Crop the image centered around center_i, center_j.
+
+        Parameters
+        ----------
+        height : int
+            The height of the desired image.
+
+        width : int
+            The width of the desired image.
+
+        center_i : int
+            The center height point at which to crop. If not specified, the center
+            of the image is used.
+
+        center_j : int
+            The center width point at which to crop. If not specified, the center
+            of the image is used.
+
+        Returns
+        -------
+        :obj:`Image`
+            A cropped Image of the same type.
+        """
+        # crop channels separately
+        color_im_cropped = self.color.crop(height, width,
+                                           center_i=center_i,
+                                           center_j=center_j)
+        depth_im_cropped = self.depth.crop(height, width,
+                                           center_i=center_i,
+                                           center_j=center_j)
+        
+        # return combination of cropped data
+        return RgbdImage.from_color_and_depth(color_im_cropped, depth_im_cropped)
+
+    def transform(self, translation, theta, method='opencv'):
+        """Create a new image by translating and rotating the current image.
+
+        Parameters
+        ----------
+        translation : :obj:`numpy.ndarray` of float
+            The XY translation vector.
+        theta : float
+            Rotation angle in radians, with positive meaning counter-clockwise.
+        method : :obj:`str`
+            Method to use for image transformations (opencv or scipy)
+
+        Returns
+        -------
+        :obj:`Image`
+            An image of the same type that has been rotated and translated.
+        """
+        # transform channels separately
+        color_im_tf = self.color.transform(translation, theta, method=method)
+        depth_im_tf = self.depth.transform(translation, theta, method=method)
+
+        # return combination of cropped data
+        return RgbdImage.from_color_and_depth(color_im_tf, depth_im_tf)
+
+    def to_grayscale_depth(self):
+        """ Converts to a grayscale and depth (G-D) image. """
+        gray = self.color.to_grayscale()
+        return GdImage.from_grayscale_and_depth(gray, self.depth)
+
+    def combine_with(self, rgbd_im):
+        """
+        Replaces all zeros in the source rgbd image with the values of a different rgbd image
+
+        Parameters
+        ----------
+        rgbd_im : :obj:`RgbdImage`
+            rgbd image to combine with
+
+        Returns
+        -------
+        :obj:`RgbdImage`
+            the combined rgbd image
+        """
+        new_data = self.data.copy()
+        depth_data = self.depth.data
+        other_depth_data = rgbd_im.depth.data
+        depth_zero_px = self.depth.zero_pixels()
+        depth_replace_px = np.where((other_depth_data != 0) & (other_depth_data < depth_data)) 
+        depth_replace_px = np.c_[depth_replace_px[0], depth_replace_px[1]]
+
+        # replace zero pixels
+        new_data[depth_zero_px[:,0], depth_zero_px[:,1], :] = rgbd_im.data[depth_zero_px[:,0], depth_zero_px[:,1], :]
+
+        # take closest pixel
+        new_data[depth_replace_px[:,0], depth_replace_px[:,1], :] = rgbd_im.data[depth_replace_px[:,0], depth_replace_px[:,1], :]
+
+        return RgbdImage(new_data, frame=self.frame)
+
+    def crop(self, height, width, center_i=None, center_j=None):
+        """Crop the image centered around center_i, center_j.
+
+        Parameters
+        ----------
+        height : int
+            The height of the desired image.
+
+        width : int
+            The width of the desired image.
+
+        center_i : int
+            The center height point at which to crop. If not specified, the center
+            of the image is used.
+
+        center_j : int
+            The center width point at which to crop. If not specified, the center
+            of the image is used.
+
+        Returns
+        -------
+        :obj:`Image`
+            A cropped Image of the same type.
+        """
+        color_im_crop = self.color.crop(height, width, center_i, center_j)
+        depth_im_crop = self.depth.crop(height, width, center_i, center_j)
+        return RgbdImage.from_color_and_depth(color_im_crop, depth_im_crop)
+
+class GdImage(Image):
+    """ An image containing a grayscale and depth channel. """
+    def __init__(self, data, frame='unspecified'):
+        """Create a G-D image from an array of data.
+
+        Parameters
+        ----------
+        data : :obj:`numpy.ndarray`
+            An array of data with which to make the image. The first dimension
+            of the data should index rows, the second columns, and the third
+            individual pixel elements (two channels, both float).
+            The first channel should be the grayscale channel
+            which must be in the range (0, 255).
+            The second channel should be the depth channel.
+
+        frame : :obj:`str`
+            A string representing the frame of reference in which this image
+            lies.
+
+        Raises
+        ------
+        ValueError
+            If the data is not a properly-formatted ndarray or frame is not a
+            string.
+        """
+        Image.__init__(self, data, frame)
+
+    def _check_valid_data(self, data):
+        """Checks that the given data is a float array with four channels.
+
+        Parameters
+        ----------
+        data : :obj:`numpy.ndarray`
+            The data to check.
+
+        Raises
+        ------
+        ValueError
+            If the data is invalid.
+        """
+        if data.dtype.type is not np.float32 and \
+           data.dtype.type is not np.float64:
+            raise ValueError('Illegal data type. G-D images only support float arrays')
+
+        if len(data.shape) != 3 and data.shape[2] != 2:
+            raise ValueError('Illegal data type. G-D images only support two channel')        
+
+        gray_data = data[:,:,0]
+        if np.any((gray_data < 0) | (gray_data > 255)):
+            raise ValueError('Gray channel must be in the range (0, 255)')
+
+    @staticmethod
+    def from_grayscale_and_depth(gray_im, depth_im):
+        """ Creates an G-D image from a separate grayscale and depth image. """
+        # check shape
+        if gray_im.height != depth_im.height or gray_im.width != depth_im.width:
+            raise ValueError('Grayscale and depth images must have the same shape')
+
+        # check frame
+        if gray_im.frame != depth_im.frame:
+            raise ValueError('Grayscale and depth images must have the same frame')
+            
+        # form composite data
+        gd_data = np.zeros([gray_im.height, gray_im.width, 2])
+        gd_data[:,:,0] = gray_im.data.astype(np.float64)
+        gd_data[:,:,1] = depth_im.data
+        return GdImage(gd_data, frame=gray_im.frame)
+
+    @property
+    def gray(self):
+        """ Returns the grayscale image. """
+        return GrayscaleImage(self.raw_data[:,:,0].astype(np.uint8), frame=self.frame)
+
+    @property
+    def depth(self):
+        """ Returns the depth image. """
+        return DepthImage(self.raw_data[:,:,1], frame=self.frame)
+
+    def _image_data(self, normalize=False):
+        """Returns the data in image format, with scaling and conversion to uint8 types.
+        NOTE: Only returns the color image!!!!
+
+        Parameters
+        ----------
+        normalize : bool
+            whether or not to normalize by the min and max depth of the image
+
+        Returns
+        -------
+        :obj:`numpy.ndarray` of uint8
+            A 3D matrix representing the image. The first dimension is rows, the
+            second is columns, and the third is a set of 3 RGB values, each of
+            which is simply the depth entry scaled to between 0 and 255.
+        """
+        return self.gray_im._image_data(normalize=normalize)
+
+    def resize(self, size, interp='bilinear'):
+        """Resize the image.
+
+        Parameters
+        ----------
+        size : int, float, or tuple
+            * int   - Percentage of current size.
+            * float - Fraction of current size.
+            * tuple - Size of the output image.
+
+        interp : :obj:`str`, optional
+            Interpolation to use for re-sizing ('nearest', 'lanczos', 'bilinear',
+            'bicubic', or 'cubic')
+        """
+        # resize channels separately
+        gray_im_resized = self.gray.resize(size, interp)
+        depth_im_resized = self.depth.resize(size, interp)
+        
+        # return combination of resized data
+        return GdImage.from_grayscale_and_depth(gray_im_resized, depth_im_resized)
+
+    def crop(self, height, width, center_i=None, center_j=None):
+        """Crop the image centered around center_i, center_j.
+
+        Parameters
+        ----------
+        height : int
+            The height of the desired image.
+
+        width : int
+            The width of the desired image.
+
+        center_i : int
+            The center height point at which to crop. If not specified, the center
+            of the image is used.
+
+        center_j : int
+            The center width point at which to crop. If not specified, the center
+            of the image is used.
+
+        Returns
+        -------
+        :obj:`Image`
+            A cropped Image of the same type.
+        """
+        gray_im_crop = self.gray.crop(height, width, center_i, center_j)
+        depth_im_crop = self.depth.crop(height, width, center_i, center_j)
+        return GdImage.from_grayscale_and_depth(gray_im_crop, depth_im_crop)
 
 class SegmentationImage(Image):
     """An image containing integer-valued segment labels.
@@ -2317,7 +2893,7 @@ class PointCloudImage(Image):
 
         Returns
         -------
-        :obj:`core.PointCloud`
+        :obj:`autolab_core.PointCloud`
             The corresponding PointCloud.
         """
         return PointCloud(data=self._data.reshape(self.height*self.width, 3).T,
@@ -2433,7 +3009,7 @@ class NormalCloudImage(Image):
 
         Returns
         -------
-        :obj:`core.NormalCloud`
+        :obj:`autolab_core.NormalCloud`
             The corresponding NormalCloud.
         """
         return NormalCloud(data=self._data.reshape(self.height*self.width, 3).T,

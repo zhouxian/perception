@@ -8,9 +8,15 @@ import json
 import os
 
 from image import DepthImage, PointCloudImage
-from core import Point, PointCloud, ImageCoords
+from autolab_core import Point, PointCloud, ImageCoords
 
 from constants import INTR_EXTENSION
+
+try:
+    from sensor_msgs.msg import CameraInfo, RegionOfInterest
+    from std_msgs.msg import Header
+except Exception:
+    print ('WARNING: AUTOLab Perception module not installed as Catkin Package. ROS msg conversions will not be available for Perception wrappers.')
 
 class CameraIntrinsics(object):
     """A set of intrinsic parameters for a camera. This class is used to project
@@ -45,8 +51,8 @@ class CameraIntrinsics(object):
         self._cx = cx
         self._cy = cy
         self._skew = skew
-        self._height = height
-        self._width = width
+        self._height = int(height)
+        self._width = int(width)
 
         # set focal, camera center automatically if under specified
         if fy is None:
@@ -131,6 +137,35 @@ class CameraIntrinsics(object):
         """
         return self._K
 
+    @property
+    def rosmsg(self):
+        """:obj:`sensor_msgs.CamerInfo` : Returns ROS CamerInfo msg 
+        """
+        msg_header = Header()
+        msg_header.frame_id = self._frame
+
+        msg_roi = RegionOfInterest()
+        msg_roi.x_offset = 0
+        msg_roi.y_offset = 0
+        msg_roi.height = 0
+        msg_roi.width = 0
+        msg_roi.do_rectify = 0
+
+        msg = CameraInfo()
+        msg.header = msg_header
+        msg.height = self._height
+        msg.width = self._width
+        msg.distortion_model = 'plumb_bob'
+        msg.D = [0.0, 0.0, 0.0, 0.0, 0.0]
+        msg.K = [self._fx, 0.0, self._cx, 0.0, self._fy, self._cy, 0.0, 0.0, 1.0]
+        msg.R = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+        msg.P = [self._fx, 0.0, self._cx, 0.0, 0.0, self._fx, self._cy, 0.0, 0.0, 0.0, 1.0, 0.0]
+        msg.binning_x = 0
+        msg.binning_y = 0
+        msg.roi = msg_roi
+
+        return msg
+
     def crop(self, height, width, crop_ci, crop_cj):
         """ Convert to new camera intrinsics for crop of image from original camera.
 
@@ -197,7 +232,7 @@ class CameraIntrinsics(object):
 
         Parameters
         ----------
-        point_cloud : :obj:`core.PointCloud` or :obj:`core.Point`
+        point_cloud : :obj:`autolab_core.PointCloud` or :obj:`autolab_core.Point`
             A PointCloud or Point to project onto the camera image plane.
 
         round_px : bool
@@ -205,7 +240,7 @@ class CameraIntrinsics(object):
 
         Returns
         -------
-        :obj:`core.ImageCoords` or :obj:`Point`
+        :obj:`autolab_core.ImageCoords` or :obj:`autolab_core.Point`
             A corresponding set of image coordinates representing the given
             PointCloud's projections onto the camera image plane. If the input
             was a single Point, returns a 2D Point in the camera plane.
@@ -240,7 +275,7 @@ class CameraIntrinsics(object):
 
         Parameters
         ----------
-        point_cloud : :obj:`core.PointCloud` or :obj:`core.Point`
+        point_cloud : :obj:`autolab_core.PointCloud` or :obj:`autolab_core.Point`
             A PointCloud or Point to project onto the camera image plane.
 
         round_px : bool
@@ -292,7 +327,7 @@ class CameraIntrinsics(object):
 
         Returns
         -------
-        :obj:`PointCloud`
+        :obj:`autolab_core.PointCloud`
             A 3D point cloud created from the depth image.
 
         Raises
@@ -351,12 +386,12 @@ class CameraIntrinsics(object):
         depth : float
             The depth value at the given pixel location.
 
-        pixel : :obj:`core.Point`
+        pixel : :obj:`autolab_core.Point`
             A 2D point representing the pixel's location in the camera image.
 
         Returns
         -------
-        :obj:`Point`
+        :obj:`autolab_core.Point`
             The projected 3D point.
 
         Raises

@@ -11,14 +11,13 @@ except Exception:
     print 'TensorFlow can be installed following the instructions in https://www.tensorflow.org/get_started/os_setup'
 from feature_matcher import Correspondences, NormalCorrespondences, FeatureMatcher, RawDistanceFeatureMatcher, PointToPlaneFeatureMatcher
 from features import Feature, LocalFeature, GlobalFeature, SHOTFeature, MVCNNFeature, BagOfFeatures
-from image import Image, ColorImage, DepthImage, IrImage, GrayscaleImage, SegmentationImage, BinaryImage, PointCloudImage, NormalCloudImage
+from image import Image, ColorImage, DepthImage, IrImage, GrayscaleImage, RgbdImage, GdImage, SegmentationImage, BinaryImage, PointCloudImage, NormalCloudImage
 from object_render import RenderMode, ObjectRender, QueryImageBundle
 from chessboard_registration import ChessboardRegistrationResult, CameraChessboardRegistration
 from point_registration import RegistrationResult, IterativeRegistrationSolver, PointToPlaneICPSolver
-from detector import RgbdDetection, RgbdDetector, RgbdForegroundMaskDetector, RgbdForegroundMaskQueryImageDetector
+from detector import RgbdDetection, RgbdDetector, RgbdForegroundMaskDetector, RgbdForegroundMaskQueryImageDetector, PointCloudBoxDetector, RgbdDetectorFactory
 
 from camera_sensor import CameraSensor
-from video_recorder import VideoRecorder
 
 try:
     from cnn import AlexNetWeights, AlexNet, conv
@@ -33,7 +32,7 @@ except Exception:
     print 'The pylibfreenect2 library can be installed from https://github.com/r9y9/pylibfreenect2'
 
 try:
-    from primesense_sensor import PrimesenseSensor, PrimesenseRegistrationMode
+    from primesense_sensor import PrimesenseSensor, VirtualPrimesenseSensor, PrimesenseSensor_ROS, PrimesenseRegistrationMode
 except Exception:
     print 'Unable to import Kinect2 sensor modules! Likely due to missing pylibfreenect2.'
     print 'The pylibfreenect2 library can be installed from https://github.com/r9y9/pylibfreenect2'
@@ -46,13 +45,13 @@ from video_writer import write_video
 __all__ = [
     'CameraIntrinsics',
     'AlexNetWeights', 'AlexNet', 'conv',
-    'RgbdDetection', 'RgbdDetector', 'RgbdForegroundMaskDetector', 'RgbdForegroundMaskQueryImageDetector',
+    'RgbdDetection', 'RgbdDetector', 'RgbdForegroundMaskDetector', 'RgbdForegroundMaskQueryImageDetector', 'PointCloudBoxDetector', 'RgbdDetectorFactory',
     'FeatureExtractor', 'CNNBatchFeatureExtractor', 'CNNReusableBatchFeatureExtractor',
     'Correspondences', 'NormalCorrespondences', 'FeatureMatcher', 'RawDistanceFeatureMatcher', 'PointToPlaneFeatureMatcher',
     'Feature', 'LocalFeature', 'GlobalFeature', 'SHOTFeature', 'MVCNNFeature', 'BagOfFeatures',
-    'Image', 'ColorImage', 'DepthImage', 'IrImage', 'GrayscaleImage', 'SegmentationImage', 'BinaryImage', 'PointCloudImage', 'NormalCloudImage',
+    'Image', 'ColorImage', 'DepthImage', 'IrImage', 'GrayscaleImage', 'RgbdImage', 'GdImage', 'SegmentationImage', 'BinaryImage', 'PointCloudImage', 'NormalCloudImage',
     'Kinect2PacketPipelineMode', 'Kinect2FrameMode', 'Kinect2RegistrationMode', 'Kinect2DepthMode', 'Kinect2Sensor', 'VirtualKinect2Sensor', 'Kinect2SensorFactory', 'load_images',
-    'RgbdSensorFactory', 'PrimesenseSensor', 'PrimesenseRegistrationMode',
+    'RgbdSensorFactory', 'PrimesenseSensor', 'VirtualPrimesenseSensor', 'PrimesenseSensor_ROS', 'PrimesenseRegistrationMode',
     'RenderMode', 'ObjectRender', 'QueryImageBundle',
     'RegistrationResult', 'IterativeRegistrationSolver', 'PointToPlaneICPSolver',
     'OpenCVCameraSensor',

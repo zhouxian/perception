@@ -8,7 +8,7 @@ import cv2
 import matplotlib.pyplot as plt
 import math
 
-from core import PointCloud, RigidTransform, Point
+from autolab_core import PointCloud, RigidTransform, Point
 from perception import DepthImage
 
 class ChessboardRegistrationResult(object):
@@ -16,9 +16,9 @@ class ChessboardRegistrationResult(object):
     
     Attributes
     ----------
-    T_camera_cb : :obj:`core.RigidTransform`
+    T_camera_cb : :obj:`autolab_core.RigidTransform`
         transformation from camera to chessboard frame
-    cb_points_camera : :obj:`core.PointCloud`
+    cb_points_camera : :obj:`autolab_core.PointCloud`
         3D locations of chessboard corners in the camera frame
     """
     def __init__(self, T_camera_cb, cb_points_camera):
@@ -39,7 +39,7 @@ class CameraChessboardRegistration:
         ----------
         sensor : :obj:`perception.RgbdSensor`
             the sensor to register
-        config : :obj:`core.YamlConfig` or :obj:`dict`
+        config : :obj:`autolab_core.YamlConfig` or :obj:`dict`
             configuration file for registration
 
         Returns
@@ -72,6 +72,7 @@ class CameraChessboardRegistration:
         sx = config['corners_x']
         sy = config['corners_y']
         color_image_rescale_factor = config['color_image_rescale_factor']
+        flip_normal = config['flip_normal']
         vis = config['vis']
 
         # read params from sensor
@@ -146,6 +147,8 @@ class CameraChessboardRegistration:
         w = np.linalg.inv(A).dot(b)
         n = np.array([w[0], w[1], -1])
         n = n / np.linalg.norm(n)
+        if flip_normal:
+            n = -n
         mean_point_plane = points_3d_plane.mean()
         
         # find x-axis of the chessboard coordinates on the fitted plane

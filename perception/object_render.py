@@ -2,7 +2,7 @@
 Wrapper for rendered images of an object on a table using Maya or our stable pose
 Author: Jeff Mahler
 """
-from core import RigidTransform
+from autolab_core import RigidTransform
 
 from image import BinaryImage, ColorImage, DepthImage
 
@@ -14,6 +14,16 @@ class RenderMode(object):
     DEPTH_SCENE = 'depth_scene'
     SCALED_DEPTH = 'scaled_depth'
     COLOR = 'color'
+    COLOR_SCENE = 'color_scene'
+    GRAY = 'gray'
+    GRAY_SCENE = 'gray_scene'
+    GD = 'gd'
+    GD_SCENE = 'gd_scene'
+    RGBD = 'rgbd'
+    RGBD_SCENE = 'rgbd_scene'
+    GD = 'gd'
+    GD_SCENE = 'gd_scene'
+    GRAYSCALE = 'gray'
 
 class ObjectRender(object):
     """Class to encapsulate images of an object rendered from a virtual camera.
@@ -33,7 +43,7 @@ class ObjectRender(object):
         image : :obj:`Image`
             The image to be encapsulated.
 
-        T_camera_world : :obj:`core.RigidTransform`
+        T_camera_world : :obj:`autolab_core.RigidTransform`
             A rigid transform from camera to world coordinates (positions the
             camera in the world). TODO -- this should be renamed.
 
@@ -54,7 +64,7 @@ class ObjectRender(object):
 
         Returns
         -------
-        :obj:`core.RigidTransform`
+        :obj:`autolab_core.RigidTransform`
             The desired transform.
         """
         if self.stable_pose is None:
