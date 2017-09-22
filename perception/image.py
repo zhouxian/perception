@@ -179,7 +179,7 @@ class Image(object):
 
     @property
     def rosmsg(self):
-        """:obj:`sensor_msgs.Image` : ROS Image 
+        """:obj:`sensor_msgs.Image` : ROS Image
         """
         cv_bridge = CvBridge()
         try:
@@ -460,7 +460,7 @@ class Image(object):
             if len(indices) > 1:
                 j = indices[1]
             if len(indices) > 2:
-                k = indices[2]  
+                k = indices[2]
         else:
             i = indices
 
@@ -877,7 +877,7 @@ class ColorImage(Image):
 
     def swap_channels(self, channel_swap):
         """ Swaps the two channels specified in the tuple.
-        
+
         Parameters
         ----------
         channel_swap : :obj:`tuple` of int
@@ -1481,7 +1481,7 @@ class DepthImage(Image):
         """
         # init mask buffer
         mask = np.zeros([self.height, self.width, 1]).astype(np.uint8)
-        
+
         # update invalid pixels
         zero_pixels = self.zero_pixels()
         nan_pixels = self.nan_pixels()
@@ -1963,7 +1963,7 @@ class BinaryImage(Image):
         data = np.copy(self._data)
         ind = np.where(binary_im.data > 0)
         data[ind[0], ind[1], ...] = 255
-        return BinaryImage(data, self._frame)        
+        return BinaryImage(data, self._frame)
 
     def inverse(self):
         """ Inverts image (all nonzeros become zeros and vice verse)
@@ -1975,7 +1975,7 @@ class BinaryImage(Image):
         data = np.zeros(self.shape).astype(np.uint8)
         ind = np.where(self.data == 0)
         data[ind[0], ind[1], ...] = 255
-        return BinaryImage(data, self._frame)        
+        return BinaryImage(data, self._frame)
 
     def prune_contours(self, area_thresh=1000.0, dist_thresh=20,
                        preserve_topology=True):
@@ -2101,7 +2101,7 @@ class BinaryImage(Image):
         """
         # compute contours
         contours = self.find_contours()
-        
+
         # fill in nonzero pixels
         new_data = np.zeros(self.data.shape)
         for contour in contours:
@@ -2359,7 +2359,7 @@ class RgbdImage(Image):
             raise ValueError('Illegal data type. RGB-D images only support float arrays')
 
         if len(data.shape) != 3 and data.shape[2] != 4:
-            raise ValueError('Illegal data type. RGB-D images only support four channel')        
+            raise ValueError('Illegal data type. RGB-D images only support four channel')
 
         color_data = data[:,:,:3]
         if np.any((color_data < 0) | (color_data > 255)):
@@ -2375,7 +2375,7 @@ class RgbdImage(Image):
         # check frame
         if color_im.frame != depth_im.frame:
             raise ValueError('Color and depth images must have the same frame')
-            
+
         # form composite data
         rgbd_data = np.zeros([color_im.height, color_im.width, 4])
         rgbd_data[:,:,:3] = color_im.data.astype(np.float64)
@@ -2392,14 +2392,9 @@ class RgbdImage(Image):
         """ Returns the depth image. """
         return DepthImage(self.raw_data[:,:,3], frame=self.frame)
 
-    def _image_data(self, normalize=False):
+    def _image_data(self):
         """Returns the data in image format, with scaling and conversion to uint8 types.
         NOTE: Only returns the color image!!!!
-
-        Parameters
-        ----------
-        normalize : bool
-            whether or not to normalize by the min and max depth of the image
 
         Returns
         -------
@@ -2408,7 +2403,7 @@ class RgbdImage(Image):
             second is columns, and the third is a set of 3 RGB values, each of
             which is simply the depth entry scaled to between 0 and 255.
         """
-        return self.color_im._image_data(normalize=normalize)
+        return self.color._image_data()
 
     def resize(self, size, interp='bilinear'):
         """Resize the image.
@@ -2427,7 +2422,7 @@ class RgbdImage(Image):
         # resize channels separately
         color_im_resized = self.color.resize(size, interp)
         depth_im_resized = self.depth.resize(size, interp)
-        
+
         # return combination of resized data
         return RgbdImage.from_color_and_depth(color_im_resized, depth_im_resized)
 
@@ -2462,7 +2457,7 @@ class RgbdImage(Image):
         depth_im_cropped = self.depth.crop(height, width,
                                            center_i=center_i,
                                            center_j=center_j)
-        
+
         # return combination of cropped data
         return RgbdImage.from_color_and_depth(color_im_cropped, depth_im_cropped)
 
@@ -2513,7 +2508,7 @@ class RgbdImage(Image):
         depth_data = self.depth.data
         other_depth_data = rgbd_im.depth.data
         depth_zero_px = self.depth.zero_pixels()
-        depth_replace_px = np.where((other_depth_data != 0) & (other_depth_data < depth_data)) 
+        depth_replace_px = np.where((other_depth_data != 0) & (other_depth_data < depth_data))
         depth_replace_px = np.c_[depth_replace_px[0], depth_replace_px[1]]
 
         # replace zero pixels
@@ -2597,7 +2592,7 @@ class GdImage(Image):
             raise ValueError('Illegal data type. G-D images only support float arrays')
 
         if len(data.shape) != 3 and data.shape[2] != 2:
-            raise ValueError('Illegal data type. G-D images only support two channel')        
+            raise ValueError('Illegal data type. G-D images only support two channel')
 
         gray_data = data[:,:,0]
         if np.any((gray_data < 0) | (gray_data > 255)):
@@ -2613,7 +2608,7 @@ class GdImage(Image):
         # check frame
         if gray_im.frame != depth_im.frame:
             raise ValueError('Grayscale and depth images must have the same frame')
-            
+
         # form composite data
         gd_data = np.zeros([gray_im.height, gray_im.width, 2])
         gd_data[:,:,0] = gray_im.data.astype(np.float64)
@@ -2665,7 +2660,7 @@ class GdImage(Image):
         # resize channels separately
         gray_im_resized = self.gray.resize(size, interp)
         depth_im_resized = self.depth.resize(size, interp)
-        
+
         # return combination of resized data
         return GdImage.from_grayscale_and_depth(gray_im_resized, depth_im_resized)
 
