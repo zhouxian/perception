@@ -252,7 +252,7 @@ class Image(object):
 
         if not Image.can_convert(x):
             raise ValueError('Cannot convert array to an Image!')
-        
+
         dtype = x.dtype
         height = x.shape[0]
         width = x.shape[1]
@@ -2072,7 +2072,7 @@ class BinaryImage(Image):
             The new pruned binary image.
         """
         # get all contours (connected components) from the binary image
-        contours, hierarchy = cv2.findContours(self.data.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        _, contours, hierarchy = cv2.findContours(self.data.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         num_contours = len(contours)
         middle_pixel = np.array(self.shape)[:2] / 2
         middle_pixel = middle_pixel.reshape(1,2)
