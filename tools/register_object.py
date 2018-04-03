@@ -12,10 +12,10 @@ from perception import CameraChessboardRegistration, RgbdSensorFactory
 
 VIS_SUPPORTED = True
 try:
-    from meshpy import ObjFile
+    from meshpy_berkeley import ObjFile
     from visualization import Visualizer3D as vis
 except:
-    print 'Failed to import AUTOLAB meshpy and / or visualization package. Visualizatoin disabled'
+    print 'Failed to import AUTOLAB meshpy_berkeley and / or visualization package. Visualizatoin disabled'
     VIS_SUPPORTED = FALSE
 
 if __name__ == '__main__':

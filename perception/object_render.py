@@ -44,7 +44,7 @@ class ObjectRender(object):
         obj_key : :obj:`str`, optional
             A string identifier for the object being rendered.
 
-        stable_pose : :obj:`meshpy.StablePose`
+        stable_pose : :obj:`meshpy_berkeley.StablePose`
             The object's stable pose.
         """
         self.image = image

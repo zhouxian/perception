@@ -1,5 +1,5 @@
 """
-Setup of meshpy python codebase
+Setup of perception python codebase
 Author: Jeff Mahler
 """
 from setuptools import setup
